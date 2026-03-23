@@ -5,9 +5,13 @@ import requests
 import csv
 import time
 import json
+import sys
 from datetime import datetime
 
-API_KEY = "AIzaSyC7mrStJZVcx8lqhO8JUsiJ-baNwlcVJdQ"
+# ローカルPC実行用（pip install requests が必要）
+# 実行方法: python3 research_kii_comments.py
+
+API_KEY = "YOUR_API_KEY_HERE"  # ← ここにAPIキーを入れてください
 BASE_URL = "https://www.googleapis.com/youtube/v3"
 
 def search_channel(query):

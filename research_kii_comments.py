@@ -1,30 +1,43 @@
 """
 「心の話 -きい-」チャンネルのコメントリサーチ
+
+【事前準備】
+1. pip install requests
+2. 下の API_KEY に YouTube Data API v3 のキーを入力して保存
+
+【実行方法】
+python3 research_kii_comments.py
+
+【出力】
+このスクリプトと同じフォルダに以下が生成されます:
+  kii_videos_YYYYMMDD_HHMM.csv   ← 動画一覧（再生数・いいね・コメント数）
+  kii_comments_YYYYMMDD_HHMM.csv ← コメント一覧（いいね数順）
 """
-import requests
+
+import os
 import csv
 import time
-import json
-import sys
+import requests
 from datetime import datetime
 
-# ローカルPC実行用（pip install requests が必要）
-# 実行方法: python3 research_kii_comments.py
+# ============================================================
+# ここにAPIキーを入力してください
+API_KEY = "YOUR_API_KEY_HERE"
+# ============================================================
 
-API_KEY = "YOUR_API_KEY_HERE"  # ← ここにAPIキーを入れてください
 BASE_URL = "https://www.googleapis.com/youtube/v3"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def search_channel(query):
-    """チャンネルを検索してIDを取得"""
-    url = f"{BASE_URL}/search"
-    params = {
+    """チャンネルを検索してID候補を表示"""
+    r = requests.get(f"{BASE_URL}/search", params={
         "key": API_KEY,
         "q": query,
         "type": "channel",
         "part": "snippet",
         "maxResults": 5,
-    }
-    r = requests.get(url, params=params)
+    })
     r.raise_for_status()
     items = r.json().get("items", [])
     for item in items:
@@ -33,21 +46,21 @@ def search_channel(query):
         print()
     return items
 
+
 def get_videos(channel_id, max_videos=50):
-    """チャンネルの動画一覧を取得"""
+    """チャンネルの動画一覧を再生数順で取得"""
     videos = []
-    url = f"{BASE_URL}/search"
     params = {
         "key": API_KEY,
         "channelId": channel_id,
         "type": "video",
         "part": "snippet",
         "maxResults": 50,
-        "order": "viewCount",  # 再生数順
+        "order": "viewCount",
     }
 
     while len(videos) < max_videos:
-        r = requests.get(url, params=params)
+        r = requests.get(f"{BASE_URL}/search", params=params)
         r.raise_for_status()
         data = r.json()
 
@@ -66,19 +79,17 @@ def get_videos(channel_id, max_videos=50):
 
     return videos[:max_videos]
 
+
 def get_video_stats(video_ids):
-    """動画の統計情報を取得"""
+    """動画の統計情報（再生数・いいね・コメント数）を取得"""
     stats = {}
-    # 50件ずつAPIを叩く
     for i in range(0, len(video_ids), 50):
-        chunk = video_ids[i:i+50]
-        url = f"{BASE_URL}/videos"
-        params = {
+        chunk = video_ids[i:i + 50]
+        r = requests.get(f"{BASE_URL}/videos", params={
             "key": API_KEY,
             "id": ",".join(chunk),
             "part": "statistics",
-        }
-        r = requests.get(url, params=params)
+        })
         r.raise_for_status()
         for item in r.json().get("items", []):
             s = item.get("statistics", {})
@@ -89,24 +100,23 @@ def get_video_stats(video_ids):
             }
     return stats
 
+
 def get_comments(video_id, max_comments=100):
-    """動画のコメントを取得"""
+    """動画のコメントをいいね数順で取得"""
     comments = []
-    url = f"{BASE_URL}/commentThreads"
     params = {
         "key": API_KEY,
         "videoId": video_id,
         "part": "snippet",
         "maxResults": 100,
-        "order": "relevance",  # 関連度順（いいね数の多いものが上）
+        "order": "relevance",
     }
 
     while len(comments) < max_comments:
         try:
-            r = requests.get(url, params=params)
+            r = requests.get(f"{BASE_URL}/commentThreads", params=params)
             if r.status_code == 403:
-                # コメント無効の動画
-                break
+                break  # コメント無効の動画
             r.raise_for_status()
             data = r.json()
 
@@ -124,16 +134,22 @@ def get_comments(video_id, max_comments=100):
                 break
             params["pageToken"] = next_page
             time.sleep(0.3)
+
         except Exception as e:
             print(f"    コメント取得エラー: {e}")
             break
 
     return comments
 
+
 def main():
+    if API_KEY == "YOUR_API_KEY_HERE":
+        print("エラー: API_KEY を設定してください（スクリプト冒頭の API_KEY = の部分）")
+        return
+
     print("=== 「心の話 -きい-」コメントリサーチ ===\n")
 
-    # Step 1: チャンネルを検索
+    # Step 1: チャンネル検索
     print("【チャンネル検索中...】")
     items = search_channel("心の話 きい")
 
@@ -141,13 +157,19 @@ def main():
         print("チャンネルが見つかりませんでした")
         return
 
-    # 手動確認用にチャンネルIDを表示（上の検索結果から選択）
     channel_id = input("使用するチャンネルID を入力してください: ").strip()
+    if not channel_id:
+        print("チャンネルIDが入力されませんでした")
+        return
 
     # Step 2: 動画一覧取得
     print(f"\n【動画一覧取得中...】（再生数TOP50）")
     videos = get_videos(channel_id, max_videos=50)
     print(f"  {len(videos)}本取得")
+
+    if not videos:
+        print("動画が見つかりませんでした")
+        return
 
     # Step 3: 統計情報取得
     print("\n【統計情報取得中...】")
@@ -157,7 +179,6 @@ def main():
     for v in videos:
         v.update(stats.get(v["video_id"], {}))
 
-    # 再生数でソート
     videos.sort(key=lambda x: x.get("view_count", 0), reverse=True)
 
     # Step 4: コメント取得（TOP20動画）
@@ -165,37 +186,37 @@ def main():
     all_comments = []
 
     for i, v in enumerate(videos[:20]):
-        print(f"  [{i+1}/20] {v['title'][:40]}... (再生:{v.get('view_count',0):,})")
+        title_short = v["title"][:40]
+        views = v.get("view_count", 0)
+        print(f"  [{i+1}/20] {title_short}... (再生:{views:,})")
         comments = get_comments(v["video_id"], max_comments=100)
         for c in comments:
             c["video_id"] = v["video_id"]
             c["video_title"] = v["title"]
-            c["video_views"] = v.get("view_count", 0)
+            c["video_views"] = views
         all_comments.extend(comments)
         time.sleep(0.5)
 
-    # Step 5: CSV保存
+    # Step 5: CSV保存（スクリプトと同じフォルダに保存）
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
 
-    # 動画リスト
-    videos_file = f"kii_videos_{timestamp}.csv"
+    videos_file = os.path.join(SCRIPT_DIR, f"kii_videos_{timestamp}.csv")
     with open(videos_file, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=["video_id","title","published_at","view_count","like_count","comment_count"])
+        w = csv.DictWriter(f, fieldnames=["video_id", "title", "published_at", "view_count", "like_count", "comment_count"])
         w.writeheader()
         w.writerows(videos)
 
-    # コメント一覧
-    comments_file = f"kii_comments_{timestamp}.csv"
+    comments_file = os.path.join(SCRIPT_DIR, f"kii_comments_{timestamp}.csv")
     with open(comments_file, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=["video_title","video_views","like_count","text","author","published_at","video_id"])
+        w = csv.DictWriter(f, fieldnames=["video_title", "video_views", "like_count", "text", "author", "published_at", "video_id"])
         w.writeheader()
-        # いいね数でソート
         all_comments.sort(key=lambda x: x.get("like_count", 0), reverse=True)
         w.writerows(all_comments)
 
     print(f"\n=== 完了 ===")
-    print(f"動画リスト: {videos_file}（{len(videos)}本）")
-    print(f"コメント: {comments_file}（{len(all_comments)}件）")
+    print(f"動画リスト : {videos_file}  （{len(videos)}本）")
+    print(f"コメント   : {comments_file}  （{len(all_comments)}件）")
+
 
 if __name__ == "__main__":
     main()

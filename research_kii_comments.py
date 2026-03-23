@@ -179,14 +179,14 @@ def main():
 
     # 動画リスト
     videos_file = f"kii_videos_{timestamp}.csv"
-    with open(f"/home/user/mainmasahiro/{videos_file}", "w", newline="", encoding="utf-8-sig") as f:
+    with open(videos_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=["video_id","title","published_at","view_count","like_count","comment_count"])
         w.writeheader()
         w.writerows(videos)
 
     # コメント一覧
     comments_file = f"kii_comments_{timestamp}.csv"
-    with open(f"/home/user/mainmasahiro/{comments_file}", "w", newline="", encoding="utf-8-sig") as f:
+    with open(comments_file, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=["video_title","video_views","like_count","text","author","published_at","video_id"])
         w.writeheader()
         # いいね数でソート
